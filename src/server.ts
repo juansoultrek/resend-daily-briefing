@@ -1,6 +1,7 @@
 import express from "express";
 import { loadConfig } from "./config.js";
 import { createGitHubClient, splitRepo, collectForRepo } from "./github/index.js";
+import { PROVIDERS } from "./providers.js";
 
 const config = loadConfig();
 const gh = createGitHubClient({ token: config.ghToken });
@@ -23,6 +24,23 @@ app.get(`${config.basePath}/health`, (_req, res) => {
       supabase: !!config.supabaseUrl && !!config.supabaseServiceRoleKey,
       cronSecret: !!config.cronSecret,
     },
+  });
+});
+
+/**
+ * Public list of providers the user can subscribe to.
+ * Consumed by the landing page UI (added in a later commit).
+ */
+app.get(`${config.basePath}/providers`, (_req, res) => {
+  res.json({
+    ok: true,
+    providers: PROVIDERS.map((p) => ({
+      slug: p.slug,
+      displayName: p.displayName,
+      tagline: p.tagline,
+      accent: p.accent,
+      repoCount: p.repos.length,
+    })),
   });
 });
 
