@@ -1,7 +1,9 @@
 import express from "express";
 import { loadConfig } from "./config.js";
+import { createGitHubClient, splitRepo, collectForRepo } from "./github/index.js";
 
 const config = loadConfig();
+const gh = createGitHubClient({ token: config.ghToken });
 
 const app = express();
 app.use(express.json());
@@ -22,6 +24,45 @@ app.get(`${config.basePath}/health`, (_req, res) => {
       cronSecret: !!config.cronSecret,
     },
   });
+});
+
+/**
+ * Debug endpoint: returns the normalized RepoEvents for one repo within the
+ * last 24h. Useful while wiring the GitHub integration. No auth — it only
+ * reads public data. Will be removed (or auth-gated) before production cron.
+ *
+ * Example: GET /test/github?repo=resend/resend
+ */
+app.get(`${config.basePath}/test/github`, async (req, res) => {
+  const repo = typeof req.query.repo === "string" ? req.query.repo : config.watchedRepos[0] ?? "";
+  if (!repo) {
+    res.status(400).json({ ok: false, error: "Missing ?repo=owner/repo" });
+    return;
+  }
+  try {
+    const [owner, name] = splitRepo(repo);
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [commits, pulls, issues] = await Promise.all([
+      gh.getCommits(owner, name, since.toISOString()),
+      gh.getPulls(owner, name),
+      gh.getIssues(owner, name, since.toISOString()),
+    ]);
+    const events = collectForRepo(repo, { commits, pulls, issues }, 24);
+    res.json({
+      ok: true,
+      repo,
+      windowHours: 24,
+      counts: { commits: commits.length, pulls: pulls.length, issues: issues.length },
+      events,
+    });
+  } catch (err) {
+    const status =
+      err && typeof err === "object" && "status" in err && typeof (err as { status: unknown }).status === "number"
+        ? (err as { status: number }).status
+        : 500;
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(status).json({ ok: false, repo, error: message });
+  }
 });
 
 const port = config.port;

@@ -82,7 +82,7 @@ export function loadConfig(): AppConfig {
     basePath: normalizeBasePath(readString("APP_BASE_PATH")),
     cronSecret: readString("CRON_SECRET"),
     ghToken: readString("GH_TOKEN"),
-    watchedRepos: parseRepos(readString("WATCHED_REPOS", "resend/resend,supabase/supabase,NangoHQ/nango")),
+    watchedRepos: parseRepos(readString("WATCHED_REPOS", "resend/resend-node,supabase/supabase,NangoHQ/nango")),
     openaiApiKey: readString("OPENAI_API_KEY"),
     openaiModel: readString("OPENAI_MODEL", "gpt-4o-mini"),
     resendApiKey: readString("RESEND_API_KEY"),
