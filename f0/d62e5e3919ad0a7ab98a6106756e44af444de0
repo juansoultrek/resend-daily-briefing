@@ -1,0 +1,19 @@
+src/github/types.ts
+  s_a07f57f33570a5::t_3f15c005165da8 1-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.17",
+  "base_commit_sha": "f0d62e5e3919ad0a7ab98a6106756e44af444de0",
+  "prompts": {},
+  "sessions": {
+    "s_a07f57f33570a5": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ebf64ed9-e238-4faa-aba5-894f25c0b667",
+        "model": "glm-5.2"
+      },
+      "human_author": "Juan <juan.villegas@formstack.com>"
+    }
+  }
+}
