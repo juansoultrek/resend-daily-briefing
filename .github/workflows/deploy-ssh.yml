@@ -1,0 +1,73 @@
+# Remote host details and credentials live only in GitHub Secrets — nothing sensitive in this file.
+
+name: Deploy production (SSH)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-resend-daily-briefing
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install and build (no verbose audit output)
+        run: npm ci --no-audit --no-fund && npm run build
+
+      # Fresh prod-only tree from Linux CI — avoids needing `npm` on cPanel SSH (often missing).
+      - name: Production node_modules for bundle
+        run: rm -rf node_modules && npm ci --omit=dev --no-audit --no-fund
+
+      # Do NOT ship .htaccess: cPanel/LiteSpeed writes Passenger directives here; our repo file would overwrite them on extract and Node would stop handling /resend/*.
+      # `public/` is included once the landing page exists (added in a later commit).
+      - name: Pack deploy bundle
+        run: tar -czf deploy-bundle.tar.gz dist package.json package-lock.json server.js node_modules
+
+      - name: Upload bundle via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USERNAME }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT }}
+          source: deploy-bundle.tar.gz
+          target: ${{ secrets.DEPLOY_REMOTE_APP_DIR }}
+          overwrite: true
+          debug: false
+
+      - name: Extract on server (includes Linux-built node_modules)
+        env:
+          REMOTE_DIR: ${{ secrets.DEPLOY_REMOTE_APP_DIR }}
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.DEPLOY_SSH_HOST }}
+          username: ${{ secrets.DEPLOY_SSH_USERNAME }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          port: ${{ secrets.DEPLOY_SSH_PORT }}
+          envs: REMOTE_DIR
+          debug: false
+          script: |
+            set -euo pipefail
+            cd "${REMOTE_DIR}"
+            rm -rf node_modules
+            tar -xzf deploy-bundle.tar.gz
+            rm -f deploy-bundle.tar.gz
+            mkdir -p tmp
+            touch tmp/restart.txt
