@@ -1,0 +1,27 @@
+src/ai/schema.ts
+  s_9dc5d93863efb3::t_f078d54b15166a 1-69
+src/ai/prompts.ts
+  s_9dc5d93863efb3::t_746e37f4a98bfb 1-91
+src/ai/index.ts
+  s_9dc5d93863efb3::t_03c6e4401cb526 1-2
+package-lock.json
+  s_9dc5d93863efb3::t_011190efc57215 12-13,1511-1519
+package.json
+  s_9dc5d93863efb3::t_1b3d4a15c512ae 18-19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "df08da0dda08188909b6816468fc314e988747df",
+  "prompts": {},
+  "sessions": {
+    "s_9dc5d93863efb3": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d67b91d5-4d63-4ae1-9951-33b5b0a8bd40",
+        "model": "glm-5.2"
+      },
+      "human_author": "Juan <juan.villegas@formstack.com>"
+    }
+  }
+}
