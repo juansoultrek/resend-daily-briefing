@@ -1,0 +1,36 @@
+src/email/template.ts
+  s_9dc5d93863efb3::t_9bac4392600558 1-225
+src/cron/briefing.ts
+  s_9dc5d93863efb3::t_c7ba3f3d0ed1ea 1-184
+src/server.ts
+  s_9dc5d93863efb3::t_5d26477f156e1f 7-8,29-36
+  s_9dc5d93863efb3::t_5192a9bc1f3906 177-218
+  s_9dc5d93863efb3::t_982d2a6b667923 37
+src/email/client.ts
+  s_9dc5d93863efb3::t_7f3a2a6f1e734e 1-36,38,40-50
+  s_9dc5d93863efb3::t_bbaff73c4f948f 37,39
+src/email/index.ts
+  s_9dc5d93863efb3::t_3ec7edd113310e 1-2
+src/cron/index.ts
+  s_9dc5d93863efb3::t_4a60da0aeb5cb5 1
+package-lock.json
+  s_9dc5d93863efb3::t_9c4893750d33a6 14,24,469-474,970-975,1304-1309,1367-1387,1533-1542
+package.json
+  s_9dc5d93863efb3::t_9716b918c8a483 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "331bf4033bbfcbb5239e84377fd9625f2e8054c1",
+  "prompts": {},
+  "sessions": {
+    "s_9dc5d93863efb3": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d67b91d5-4d63-4ae1-9951-33b5b0a8bd40",
+        "model": "glm-5.2"
+      },
+      "human_author": "Juan <juan.villegas@formstack.com>"
+    }
+  }
+}
