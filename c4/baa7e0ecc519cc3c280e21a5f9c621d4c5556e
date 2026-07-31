@@ -1,0 +1,21 @@
+.github/workflows/deploy-ssh.yml
+  s_9dc5d93863efb3::t_b56bc458fb9a2b 25,28
+package.json
+  s_9dc5d93863efb3::t_247403bab9a211 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.18",
+  "base_commit_sha": "c4baa7e0ecc519cc3c280e21a5f9c621d4c5556e",
+  "prompts": {},
+  "sessions": {
+    "s_9dc5d93863efb3": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d67b91d5-4d63-4ae1-9951-33b5b0a8bd40",
+        "model": "glm-5.2"
+      },
+      "human_author": "Juan <juan.villegas@formstack.com>"
+    }
+  }
+}
