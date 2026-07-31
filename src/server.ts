@@ -1,10 +1,15 @@
 import express from "express";
 import { loadConfig } from "./config.js";
 import { createGitHubClient, splitRepo, collectForRepo } from "./github/index.js";
-import { PROVIDERS } from "./providers.js";
+import { createAnalyzer } from "./ai/index.js";
+import { PROVIDERS, getProvider, resolveRepos } from "./providers.js";
 
 const config = loadConfig();
 const gh = createGitHubClient({ token: config.ghToken });
+const analyzer = createAnalyzer({
+  apiKey: config.openaiApiKey,
+  model: config.openaiModel,
+});
 
 const app = express();
 app.use(express.json());
@@ -80,6 +85,49 @@ app.get(`${config.basePath}/test/github`, async (req, res) => {
         : 500;
     const message = err instanceof Error ? err.message : String(err);
     res.status(status).json({ ok: false, repo, error: message });
+  }
+});
+
+/**
+ * Debug endpoint: runs the full pipeline (GitHub fetch → AI analysis) for one
+ * provider and returns the structured ProviderAnalysis. Requires OPENAI_API_KEY.
+ *
+ * Example: GET /test/ai?provider=resend
+ */
+app.get(`${config.basePath}/test/ai`, async (req, res) => {
+  const providerSlug = typeof req.query.provider === "string" ? req.query.provider : "";
+  if (!providerSlug) {
+    res.status(400).json({ ok: false, error: "Missing ?provider=slug" });
+    return;
+  }
+  const provider = getProvider(providerSlug);
+  if (!provider) {
+    res.status(400).json({ ok: false, error: `Unknown provider: ${providerSlug}` });
+    return;
+  }
+  try {
+    const repos = provider.repos;
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const allEvents = [];
+    for (const repo of repos) {
+      const [owner, name] = splitRepo(repo);
+      const [commits, pulls, issues] = await Promise.all([
+        gh.getCommits(owner, name, since.toISOString()),
+        gh.getPulls(owner, name),
+        gh.getIssues(owner, name, since.toISOString()),
+      ]);
+      allEvents.push(...collectForRepo(repo, { commits, pulls, issues }, 24));
+    }
+    const analysis = await analyzer.analyze(providerSlug, allEvents);
+    res.json({
+      ok: true,
+      provider: providerSlug,
+      eventsAnalyzed: allEvents.length,
+      analysis,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, provider: providerSlug, error: message });
   }
 });
 
