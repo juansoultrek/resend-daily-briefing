@@ -4,6 +4,8 @@ import { createGitHubClient, splitRepo, collectForRepo } from "./github/index.js
 import { createAnalyzer } from "./ai/index.js";
 import { PROVIDERS, getProvider, resolveRepos } from "./providers.js";
 import { createDbClient, SubscribersRepo, DispatchesRepo } from "./db/index.js";
+import { createMailer } from "./email/client.js";
+import { runDailyBriefing } from "./cron/briefing.js";
 
 const config = loadConfig();
 const gh = createGitHubClient({ token: config.ghToken });
@@ -23,6 +25,15 @@ if (config.supabaseUrl && config.supabaseServiceRoleKey) {
   subscribers = new SubscribersRepo(db);
   dispatches = new DispatchesRepo(db);
 }
+
+// Mailer is optional at boot — only wire it if RESEND_API_KEY is set.
+const mailer = config.resendApiKey && config.resendFrom
+  ? createMailer({ apiKey: config.resendApiKey, from: config.resendFrom })
+  : null;
+
+// Public base URL used to build manage/unsubscribe links in the emails.
+// Defaults to the cPanel mount path; override with APP_BASE_URL in env.
+const appBaseUrl = (process.env.APP_BASE_URL ?? `https://juansoultrek.com${config.basePath || ""}`).replace(/\/$/, "");
 
 const app = express();
 app.use(express.json());
@@ -163,6 +174,48 @@ app.get(`${config.basePath}/health-db`, async (_req, res) => {
 });
 
 const port = config.port;
+
+/**
+ * Cron entrypoint: runs the daily briefing for all confirmed subscribers.
+ * Protected by the X-Cron-Secret header (shared with the cron scheduler).
+ *
+ * Requires: GH_TOKEN, OPENAI_API_KEY, RESEND_API_KEY, RESEND_FROM,
+ *           SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET.
+ *
+ * Trigger with:
+ *   curl -X POST https://juansoultrek.com/resend/cron/briefing \
+ *        -H "X-Cron-Secret: $CRON_SECRET"
+ */
+app.post(`${config.basePath}/cron/briefing`, async (req, res) => {
+  const provided = req.get("X-Cron-Secret") ?? "";
+  if (!config.cronSecret || provided !== config.cronSecret) {
+    res.status(401).json({ ok: false, error: "Unauthorized" });
+    return;
+  }
+  if (!subscribers || !dispatches) {
+    res.status(503).json({ ok: false, error: "Supabase not configured" });
+    return;
+  }
+  if (!mailer) {
+    res.status(503).json({ ok: false, error: "Resend not configured (RESEND_API_KEY / RESEND_FROM missing)" });
+    return;
+  }
+  try {
+    const result = await runDailyBriefing({
+      subscribers,
+      dispatches,
+      gh,
+      analyzer,
+      mailer,
+      appBaseUrl,
+    });
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`[resend-daily-briefing] listening on :${port} (basePath: ${config.basePath || "/"})`);
   console.log(`[resend-daily-briefing] health: http://localhost:${port}${config.basePath}/health`);
