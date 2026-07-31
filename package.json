@@ -5,7 +5,7 @@
   "description": "Resend Daily Briefing — AI-analyzed daily email digest of GitHub repo activity, sent via Resend.",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "main": "dist/server.js",
   "scripts": {
