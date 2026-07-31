@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.build.json --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.111.0",
     "express": "^5.1.0",
     "zod": "^4.4.3"
   },

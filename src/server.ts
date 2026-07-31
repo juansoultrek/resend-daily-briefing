@@ -3,6 +3,7 @@ import { loadConfig } from "./config.js";
 import { createGitHubClient, splitRepo, collectForRepo } from "./github/index.js";
 import { createAnalyzer } from "./ai/index.js";
 import { PROVIDERS, getProvider, resolveRepos } from "./providers.js";
+import { createDbClient, SubscribersRepo, DispatchesRepo } from "./db/index.js";
 
 const config = loadConfig();
 const gh = createGitHubClient({ token: config.ghToken });
@@ -10,6 +11,18 @@ const analyzer = createAnalyzer({
   apiKey: config.openaiApiKey,
   model: config.openaiModel,
 });
+
+// DB is optional at boot — only wire it if both Supabase vars are set.
+let subscribers: SubscribersRepo | null = null;
+let dispatches: DispatchesRepo | null = null;
+if (config.supabaseUrl && config.supabaseServiceRoleKey) {
+  const db = createDbClient({
+    url: config.supabaseUrl,
+    serviceRoleKey: config.supabaseServiceRoleKey,
+  });
+  subscribers = new SubscribersRepo(db);
+  dispatches = new DispatchesRepo(db);
+}
 
 const app = express();
 app.use(express.json());
@@ -128,6 +141,24 @@ app.get(`${config.basePath}/test/ai`, async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ ok: false, provider: providerSlug, error: message });
+  }
+});
+
+/**
+ * Health check for the Supabase connection — does a trivial query.
+ * Also useful as a keep-alive ping target.
+ */
+app.get(`${config.basePath}/health-db`, async (_req, res) => {
+  if (!subscribers) {
+    res.status(503).json({ ok: false, error: "Supabase not configured (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing)" });
+    return;
+  }
+  try {
+    const active = await subscribers.listActiveConfirmed();
+    res.json({ ok: true, activeSubscribers: active.length });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
   }
 });
 
