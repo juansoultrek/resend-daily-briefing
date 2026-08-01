@@ -151,8 +151,8 @@ export function renderBriefingEmail(
 
   const providerSections = briefing.providers.map(renderProviderSection).join("");
 
-  const manageUrl = `${options.appBaseUrl}/resend/manage?token=${encodeURIComponent(subscriber.token)}`;
-  const unsubscribeUrl = `${options.appBaseUrl}/resend/unsubscribe?token=${encodeURIComponent(subscriber.token)}`;
+  const manageUrl = `${options.appBaseUrl}/manage?token=${encodeURIComponent(subscriber.token)}`;
+  const unsubscribeUrl = `${options.appBaseUrl}/unsubscribe?token=${encodeURIComponent(subscriber.token)}`;
 
   const html = `<!DOCTYPE html>
 <html lang="en">

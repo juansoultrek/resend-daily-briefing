@@ -24,7 +24,7 @@ export function renderConfirmationEmail(
   providerSlugs: string[],
   options: { appBaseUrl: string },
 ): RenderedConfirmation {
-  const confirmUrl = `${options.appBaseUrl}/resend/confirm?token=${encodeURIComponent(subscriber.token)}`;
+  const confirmUrl = `${options.appBaseUrl}/confirm?token=${encodeURIComponent(subscriber.token)}`;
   const greeting = subscriber.name ? `Hi ${escapeHtml(subscriber.name)},` : "Hi,";
 
   const providerChips = providerSlugs

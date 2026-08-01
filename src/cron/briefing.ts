@@ -144,7 +144,7 @@ export async function runDailyBriefing(deps: BriefingRunDeps): Promise<BriefingR
         subject,
         html,
         headers: {
-          "List-Unsubscribe": `<${deps.appBaseUrl}/resend/unsubscribe?token=${encodeURIComponent(sub.token)}>; <mailto:briefing@juansoultrek.com?subject=unsubscribe>`,
+          "List-Unsubscribe": `<${deps.appBaseUrl}/unsubscribe?token=${encodeURIComponent(sub.token)}>; <mailto:briefing@juansoultrek.com?subject=unsubscribe>`,
           "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
         },
       });
