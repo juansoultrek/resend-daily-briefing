@@ -1,0 +1,28 @@
+src/server.ts
+  s_9dc5d93863efb3::t_b0a8e6abc16f4c 8,10-11
+  s_9dc5d93863efb3::t_bf9b632968657d 222-375
+src/email/index.ts
+  s_9dc5d93863efb3::t_288e6c2c78f6d8 3
+src/auth/token.ts
+  s_9dc5d93863efb3::t_3350a283fa50c0 1-10
+src/auth/index.ts
+  s_9dc5d93863efb3::t_a208dc935c8cc7 1
+src/email/confirm-template.ts
+  s_9dc5d93863efb3::t_d594088ec596d6 1-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.19",
+  "base_commit_sha": "e651d4f4a0e0e9a3ac3d1f60af52acc462db3872",
+  "prompts": {},
+  "sessions": {
+    "s_9dc5d93863efb3": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "d67b91d5-4d63-4ae1-9951-33b5b0a8bd40",
+        "model": "glm-5.2"
+      },
+      "human_author": "Juan <juan.villegas@formstack.com>"
+    }
+  }
+}
