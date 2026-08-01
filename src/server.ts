@@ -5,7 +5,10 @@ import { createAnalyzer } from "./ai/index.js";
 import { PROVIDERS, getProvider, resolveRepos } from "./providers.js";
 import { createDbClient, SubscribersRepo, DispatchesRepo } from "./db/index.js";
 import { createMailer } from "./email/client.js";
+import { renderConfirmationEmail } from "./email/confirm-template.js";
 import { runDailyBriefing } from "./cron/briefing.js";
+import { generateToken } from "./auth/token.js";
+import { isValidProviderSlug, PROVIDER_SLUGS } from "./providers.js";
 
 const config = loadConfig();
 const gh = createGitHubClient({ token: config.ghToken });
@@ -210,6 +213,160 @@ app.post(`${config.basePath}/cron/briefing`, async (req, res) => {
       appBaseUrl,
     });
     res.json({ ok: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
+// --- Subscription endpoints (public) ---
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(v: unknown): v is string {
+  return typeof v === "string" && EMAIL_RE.test(v) && v.length <= 254;
+}
+
+function sanitizeProviders(input: unknown): string[] | null {
+  if (!Array.isArray(input)) return null;
+  const slugs = input.filter((s): s is string => typeof s === "string" && isValidProviderSlug(s));
+  if (slugs.length === 0) return null;
+  // dedupe preserving order
+  return [...new Set(slugs)];
+}
+
+/**
+ * POST /subscribe
+ * Body: { email, name?, providers[] }
+ *
+ * - If already confirmed & active → returns { alreadySubscribed: true, providers }
+ * - If new (or unconfirmed) → creates/reuses subscriber, sends double opt-in email.
+ */
+app.post(`${config.basePath}/subscribe`, async (req, res) => {
+  if (!subscribers || !mailer) {
+    res.status(503).json({ ok: false, error: "Subscriptions not configured (Supabase/Resend missing)" });
+    return;
+  }
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!isValidEmail(email)) {
+    res.status(400).json({ ok: false, error: "Invalid email" });
+    return;
+  }
+  const name = typeof body.name === "string" && body.name.trim().length > 0 ? body.name.trim().slice(0, 120) : null;
+  const providers = sanitizeProviders(body.providers);
+  if (!providers) {
+    res.status(400).json({ ok: false, error: `providers must be a non-empty array of valid slugs: ${PROVIDER_SLUGS.join(", ")}` });
+    return;
+  }
+
+  try {
+    const existing = await subscribers.findByEmail(email);
+    if (existing && existing.confirmed) {
+      res.json({ ok: true, alreadySubscribed: true, providers: existing.providers });
+      return;
+    }
+
+    // Create new subscriber or reuse the unconfirmed row with a fresh token.
+    let sub;
+    if (existing) {
+      // Re-send confirmation to the already-existing unconfirmed subscriber.
+      sub = existing;
+    } else {
+      sub = await subscribers.create({ email, name, token: generateToken(), providers });
+    }
+
+    const { subject, html } = renderConfirmationEmail(sub, sub.providers, { appBaseUrl });
+    await mailer.send({ to: sub.email, subject, html });
+    res.json({ ok: true, confirmationSent: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
+/**
+ * GET /confirm?token=...
+ * Double opt-in: marks the subscriber as confirmed.
+ */
+app.get(`${config.basePath}/confirm`, async (req, res) => {
+  if (!subscribers) {
+    res.status(503).json({ ok: false, error: "Supabase not configured" });
+    return;
+  }
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!token) {
+    res.status(400).json({ ok: false, error: "Missing ?token" });
+    return;
+  }
+  try {
+    const sub = await subscribers.confirm(token);
+    if (!sub) {
+      res.status(404).json({ ok: false, error: "Token not found or already unsubscribed" });
+      return;
+    }
+    res.json({ ok: true, confirmed: true, email: sub.email, providers: sub.providers });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
+/**
+ * POST /manage
+ * Body: { email, providers[] }
+ * Updates which providers an existing confirmed subscriber receives.
+ */
+app.post(`${config.basePath}/manage`, async (req, res) => {
+  if (!subscribers) {
+    res.status(503).json({ ok: false, error: "Supabase not configured" });
+    return;
+  }
+  const body = req.body ?? {};
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!isValidEmail(email)) {
+    res.status(400).json({ ok: false, error: "Invalid email" });
+    return;
+  }
+  const providers = sanitizeProviders(body.providers);
+  if (!providers) {
+    res.status(400).json({ ok: false, error: "providers must be a non-empty array of valid slugs" });
+    return;
+  }
+  try {
+    const sub = await subscribers.updateProviders({ email, providers });
+    if (!sub) {
+      res.status(404).json({ ok: false, error: "Subscriber not found or unsubscribed" });
+      return;
+    }
+    res.json({ ok: true, updated: true, providers: sub.providers });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
+/**
+ * GET /unsubscribe?token=...
+ * Soft-delete: sets unsubscribed_at. Preserves dispatch history.
+ */
+app.get(`${config.basePath}/unsubscribe`, async (req, res) => {
+  if (!subscribers) {
+    res.status(503).json({ ok: false, error: "Supabase not configured" });
+    return;
+  }
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!token) {
+    res.status(400).json({ ok: false, error: "Missing ?token" });
+    return;
+  }
+  try {
+    const sub = await subscribers.unsubscribe(token);
+    if (!sub) {
+      res.status(404).json({ ok: false, error: "Token not found or already unsubscribed" });
+      return;
+    }
+    res.json({ ok: true, unsubscribed: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ ok: false, error: message });
