@@ -1,5 +1,4 @@
 import express from "express";
-import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { loadConfig } from "./config.js";
 import { createGitHubClient, splitRepo, collectForRepo } from "./github/index.js";
@@ -12,9 +11,8 @@ import { runDailyBriefing } from "./cron/briefing.js";
 import { generateToken } from "./auth/token.js";
 import { isValidProviderSlug, PROVIDER_SLUGS } from "./providers.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// dist/server.js → ../public  (works in both dev via tsx and compiled Passenger)
-const publicDir = path.resolve(__dirname, "..", "public");
+// App root on Passenger/cPanel; also correct when running via `npm run dev` from repo root.
+const publicDir = path.resolve(process.cwd(), "public");
 
 const config = loadConfig();
 const gh = createGitHubClient({ token: config.ghToken });
