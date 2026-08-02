@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manage subscriptions | Daily Briefing</title>
+  <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Manage subscriptions</p>
+    <h1>Your providers</h1>
+    <p class="intro" id="intro">Loading your current subscriptions…</p>
+
+    <div class="card" id="card" style="display:none">
+      <div id="providers" class="providers"></div>
+      <button id="saveBtn">Save changes</button>
+      <div id="status" class="status"></div>
+    </div>
+
+    <a class="back" href="./">Back to subscribe</a>
+  </main>
+
+  <script src="assets/app.js"></script>
+  <script>
+    const { BASE, getJson, postJson, renderProviders, showStatus, getCheckedSlugs } = window.RDB;
+    const token = new URLSearchParams(location.search).get("token");
+    const introEl = document.getElementById("intro");
+    const cardEl = document.getElementById("card");
+    const providersEl = document.getElementById("providers");
+    const saveBtn = document.getElementById("saveBtn");
+    const statusEl = document.getElementById("status");
+
+    (async () => {
+      if (!token) {
+        introEl.textContent = "Missing token. Use the link from your email.";
+        return;
+      }
+      const { data } = await getJson(`/subscriber?token=${encodeURIComponent(token)}`);
+      if (!data || !data.ok) {
+        introEl.textContent = (data && data.error) || "Subscriber not found or already unsubscribed.";
+        return;
+      }
+      introEl.textContent = `Signed in as ${data.email}. Toggle the providers you want to receive.`;
+      cardEl.style.display = "block";
+      await renderProviders(providersEl, new Set(data.providers));
+    })();
+
+    saveBtn.addEventListener("click", async () => {
+      const providers = getCheckedSlugs(providersEl);
+      if (providers.length === 0) {
+        showStatus(statusEl, "err", "Select at least one provider, or unsubscribe instead.");
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving…";
+      const { data } = await postJson("/manage", { token, providers });
+      if (data && data.ok) {
+        showStatus(statusEl, "ok", "Saved. Your next briefing will include the selected providers.");
+      } else {
+        showStatus(statusEl, "err", (data && data.error) || "Could not save.");
+      }
+      saveBtn.disabled = false;
+      saveBtn.textContent = "Save changes";
+    });
+  </script>
+</body>
+</html>

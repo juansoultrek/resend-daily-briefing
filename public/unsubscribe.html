@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unsubscribed | Daily Briefing</title>
+  <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Resend Daily Briefing</p>
+    <h1 id="heading">You've been unsubscribed</h1>
+
+    <div class="card result-card">
+      <div class="badge ok" id="badge">✓</div>
+      <h2 id="title">No more briefings</h2>
+      <p id="msg">You won't receive Daily Briefing emails anymore. You can re-subscribe anytime from the landing page.</p>
+    </div>
+
+    <a class="back" href="./">Back to subscribe</a>
+  </main>
+
+  <script>
+    const status = new URLSearchParams(location.search).get("status") || "ok";
+    const badge = document.getElementById("badge");
+    const title = document.getElementById("title");
+    const msg = document.getElementById("msg");
+    const heading = document.getElementById("heading");
+
+    if (status !== "ok") {
+      heading.textContent = "Already unsubscribed";
+      badge.className = "badge warn";
+      badge.textContent = "!";
+      title.textContent = "Nothing to do";
+      msg.textContent = "This link was already used, or the subscription was not found. You're not on the list.";
+    }
+  </script>
+</body>
+</html>

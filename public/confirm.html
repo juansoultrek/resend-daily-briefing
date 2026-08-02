@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Confirmed | Daily Briefing</title>
+  <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <main>
+    <p class="eyebrow">Resend Daily Briefing</p>
+    <h1 id="heading">Subscription confirmed</h1>
+
+    <div class="card result-card">
+      <div class="badge ok" id="badge">✓</div>
+      <h2 id="title">You're in.</h2>
+      <p id="msg">Your first briefing will land in your inbox tomorrow morning. You can change providers anytime from the manage link in any email.</p>
+    </div>
+
+    <a class="back" href="./">Back to subscribe</a>
+  </main>
+
+  <script>
+    const status = new URLSearchParams(location.search).get("status") || "ok";
+    const badge = document.getElementById("badge");
+    const title = document.getElementById("title");
+    const msg = document.getElementById("msg");
+    const heading = document.getElementById("heading");
+
+    if (status !== "ok") {
+      heading.textContent = "Could not confirm";
+      badge.className = "badge warn";
+      badge.textContent = "!";
+      title.textContent = "Link invalid or expired";
+      msg.textContent = "This confirmation link is no longer valid. Subscribe again from the landing page and we'll send a fresh email.";
+    }
+  </script>
+</body>
+</html>

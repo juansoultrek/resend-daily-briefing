@@ -1,4 +1,6 @@
 import express from "express";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { loadConfig } from "./config.js";
 import { createGitHubClient, splitRepo, collectForRepo } from "./github/index.js";
 import { createAnalyzer } from "./ai/index.js";
@@ -9,6 +11,10 @@ import { renderConfirmationEmail } from "./email/confirm-template.js";
 import { runDailyBriefing } from "./cron/briefing.js";
 import { generateToken } from "./auth/token.js";
 import { isValidProviderSlug, PROVIDER_SLUGS } from "./providers.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// dist/server.js → ../public  (works in both dev via tsx and compiled Passenger)
+const publicDir = path.resolve(__dirname, "..", "public");
 
 const config = loadConfig();
 const gh = createGitHubClient({ token: config.ghToken });
@@ -40,6 +46,23 @@ const appBaseUrl = (process.env.APP_BASE_URL ?? `https://juansoultrek.com${confi
 
 const app = express();
 app.use(express.json());
+
+// Static assets (css/js/icons) for the public pages.
+app.use(`${config.basePath}/assets`, express.static(path.join(publicDir, "assets")));
+
+// --- Public HTML pages ---
+
+/** GET /resend/ — landing: subscribe / detect existing subscriber. */
+app.get(`${config.basePath}/`, (_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
+});
+
+/** GET /resend/manage — manage page (reads token from query via JS). */
+app.get(`${config.basePath}/manage`, (_req, res) => {
+  res.sendFile(path.join(publicDir, "manage.html"));
+});
+
+// --- Subscription API endpoints (public) ---
 
 // Minimal health endpoint — no auth, safe to expose.
 app.get(`${config.basePath}/health`, (_req, res) => {
@@ -286,10 +309,38 @@ app.post(`${config.basePath}/subscribe`, async (req, res) => {
 });
 
 /**
- * GET /confirm?token=...
- * Double opt-in: marks the subscriber as confirmed.
+ * GET /lookup?email=...
+ * Detects whether an email is already a confirmed subscriber.
+ * Used by the landing page to switch between subscribe and manage views.
  */
-app.get(`${config.basePath}/confirm`, async (req, res) => {
+app.get(`${config.basePath}/lookup`, async (req, res) => {
+  if (!subscribers) {
+    res.status(503).json({ ok: false, error: "Supabase not configured" });
+    return;
+  }
+  const email = typeof req.query.email === "string" ? req.query.email.trim().toLowerCase() : "";
+  if (!isValidEmail(email)) {
+    res.status(400).json({ ok: false, error: "Invalid email" });
+    return;
+  }
+  try {
+    const sub = await subscribers.findByEmail(email);
+    if (!sub) {
+      res.json({ ok: true, exists: false, confirmed: false, providers: [] });
+      return;
+    }
+    res.json({ ok: true, exists: true, confirmed: sub.confirmed, providers: sub.providers });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ ok: false, error: message });
+  }
+});
+
+/**
+ * GET /subscriber?token=...
+ * Returns the subscriber's current providers — used by manage.html to pre-fill.
+ */
+app.get(`${config.basePath}/subscriber`, async (req, res) => {
   if (!subscribers) {
     res.status(503).json({ ok: false, error: "Supabase not configured" });
     return;
@@ -300,12 +351,12 @@ app.get(`${config.basePath}/confirm`, async (req, res) => {
     return;
   }
   try {
-    const sub = await subscribers.confirm(token);
+    const sub = await subscribers.findByToken(token);
     if (!sub) {
       res.status(404).json({ ok: false, error: "Token not found or already unsubscribed" });
       return;
     }
-    res.json({ ok: true, confirmed: true, email: sub.email, providers: sub.providers });
+    res.json({ ok: true, email: sub.email, name: sub.name, providers: sub.providers });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ ok: false, error: message });
@@ -314,8 +365,9 @@ app.get(`${config.basePath}/confirm`, async (req, res) => {
 
 /**
  * POST /manage
- * Body: { email, providers[] }
+ * Body: { email?, token?, providers[] }
  * Updates which providers an existing confirmed subscriber receives.
+ * Accepts either email (from landing) or token (from email link).
  */
 app.post(`${config.basePath}/manage`, async (req, res) => {
   if (!subscribers) {
@@ -323,9 +375,10 @@ app.post(`${config.basePath}/manage`, async (req, res) => {
     return;
   }
   const body = req.body ?? {};
+  const token = typeof body.token === "string" ? body.token.trim() : "";
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-  if (!isValidEmail(email)) {
-    res.status(400).json({ ok: false, error: "Invalid email" });
+  if (!token && !isValidEmail(email)) {
+    res.status(400).json({ ok: false, error: "Provide either email or token" });
     return;
   }
   const providers = sanitizeProviders(body.providers);
@@ -334,7 +387,18 @@ app.post(`${config.basePath}/manage`, async (req, res) => {
     return;
   }
   try {
-    const sub = await subscribers.updateProviders({ email, providers });
+    // If token provided, resolve the email from it (so the update targets
+    // the right row even if the caller only has the token).
+    let targetEmail = email;
+    if (token && !targetEmail) {
+      const byToken = await subscribers.findByToken(token);
+      if (!byToken) {
+        res.status(404).json({ ok: false, error: "Token not found or already unsubscribed" });
+        return;
+      }
+      targetEmail = byToken.email;
+    }
+    const sub = await subscribers.updateProviders({ email: targetEmail, providers });
     if (!sub) {
       res.status(404).json({ ok: false, error: "Subscriber not found or unsubscribed" });
       return;
@@ -347,30 +411,59 @@ app.post(`${config.basePath}/manage`, async (req, res) => {
 });
 
 /**
- * GET /unsubscribe?token=...
- * Soft-delete: sets unsubscribed_at. Preserves dispatch history.
+ * GET /confirm?token=...
+ * Double opt-in: marks the subscriber as confirmed, then redirects to a visual page.
  */
-app.get(`${config.basePath}/unsubscribe`, async (req, res) => {
+app.get(`${config.basePath}/confirm`, async (req, res) => {
   if (!subscribers) {
-    res.status(503).json({ ok: false, error: "Supabase not configured" });
+    res.status(503).send("Subscriptions not configured");
     return;
   }
   const token = typeof req.query.token === "string" ? req.query.token : "";
   if (!token) {
-    res.status(400).json({ ok: false, error: "Missing ?token" });
+    res.redirect(`${config.basePath}/confirmed?status=notfound`);
+    return;
+  }
+  try {
+    const sub = await subscribers.confirm(token);
+    res.redirect(`${config.basePath}/confirmed?status=${sub ? "ok" : "notfound"}`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    res.status(500).send(message);
+  }
+});
+
+/** Visual result page after confirming (served after redirect from /confirm). */
+app.get(`${config.basePath}/confirmed`, (_req, res) => {
+  res.sendFile(path.join(publicDir, "confirm.html"));
+});
+
+/**
+ * GET /unsubscribe?token=...
+ * Soft-delete: sets unsubscribed_at, then redirects to a visual page.
+ */
+app.get(`${config.basePath}/unsubscribe`, async (req, res) => {
+  if (!subscribers) {
+    res.status(503).send("Subscriptions not configured");
+    return;
+  }
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  if (!token) {
+    res.redirect(`${config.basePath}/unsubscribed?status=notfound`);
     return;
   }
   try {
     const sub = await subscribers.unsubscribe(token);
-    if (!sub) {
-      res.status(404).json({ ok: false, error: "Token not found or already unsubscribed" });
-      return;
-    }
-    res.json({ ok: true, unsubscribed: true });
+    res.redirect(`${config.basePath}/unsubscribed?status=${sub ? "ok" : "notfound"}`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ ok: false, error: message });
+    res.status(500).send(message);
   }
+});
+
+/** Visual result page after unsubscribing. */
+app.get(`${config.basePath}/unsubscribed`, (_req, res) => {
+  res.sendFile(path.join(publicDir, "unsubscribe.html"));
 });
 
 app.listen(port, () => {
