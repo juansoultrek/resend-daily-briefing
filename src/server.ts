@@ -50,8 +50,8 @@ app.use(`${config.basePath}/assets`, express.static(path.join(publicDir, "assets
 
 // --- Public HTML pages ---
 
-/** GET /resend/ — landing: subscribe / detect existing subscriber. */
-app.get(`${config.basePath}/`, (_req, res) => {
+/** GET /resend — landing (no trailing slash preferred; both work). */
+app.get([`${config.basePath}`, `${config.basePath}/`], (_req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 

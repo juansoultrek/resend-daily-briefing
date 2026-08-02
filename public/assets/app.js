@@ -1,13 +1,23 @@
 // Shared helpers for the public pages of Resend Daily Briefing.
 
-// App is mounted under /resend on juansoultrek.com (and optionally elsewhere via APP_BASE_PATH).
+// Prefer the path where this script was loaded from (works with or without
+// a trailing slash on the page URL). Fall back to the first path segment
+// or an inline window.__RDB_BASE set by the page.
 function getBasePath() {
-  const base = document.querySelector("base")?.getAttribute("href");
-  if (base) return base.replace(/\/$/, "");
-
-  // "/resend", "/resend/", "/resend/manage" → "/resend"
-  const path = window.location.pathname || "/";
-  const m = path.match(/^(\/[^/]+)/);
+  if (typeof window !== "undefined" && typeof window.__RDB_BASE === "string") {
+    return window.__RDB_BASE.replace(/\/$/, "");
+  }
+  const scripts = document.querySelectorAll('script[src*="assets/app.js"]');
+  const src = scripts.length ? scripts[scripts.length - 1].src : "";
+  if (src) {
+    try {
+      // …/resend/assets/app.js → /resend
+      return new URL("..", src).pathname.replace(/\/$/, "");
+    } catch {
+      /* ignore */
+    }
+  }
+  const m = (window.location.pathname || "").match(/^(\/[^/]+)/);
   return m ? m[1] : "";
 }
 
@@ -32,8 +42,6 @@ async function postJson(path, body) {
   });
 }
 
-// Render the provider list as checkboxes into a container.
-// `checked` is the set of slugs that should be pre-checked.
 async function renderProviders(container, checked) {
   const { ok, data } = await getJson("/providers");
   if (!ok || !data || !data.providers) {

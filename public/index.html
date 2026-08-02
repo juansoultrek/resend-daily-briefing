@@ -6,7 +6,15 @@
   <title>Daily Briefing | JuanSoulTrek</title>
   <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
   <meta name="theme-color" content="#0f172a">
-  <link rel="stylesheet" href="assets/styles.css">
+  <script>
+    // Resolve mount path before any relative asset loads.
+    // /resend and /resend/ both become "/resend" — no trailing slash.
+    window.__RDB_BASE = (function () {
+      var m = location.pathname.match(/^(\/[^\/]+)/);
+      return m ? m[1] : "";
+    })();
+    document.write('<link rel="stylesheet" href="' + window.__RDB_BASE + '/assets/styles.css">');
+  </script>
 </head>
 <body>
   <main>
@@ -40,9 +48,11 @@
     <a class="back" href="/">Back to home</a>
   </main>
 
-  <script src="assets/app.js"></script>
   <script>
-    const { BASE, getJson, postJson, renderProviders, showStatus, getCheckedSlugs } = window.RDB;
+    document.write('<script src="' + window.__RDB_BASE + '/assets/app.js"><\/script>');
+  </script>
+  <script>
+    const { getJson, postJson, renderProviders, showStatus, getCheckedSlugs } = window.RDB;
     const emailEl = document.getElementById("email");
     const nameWrap = document.getElementById("nameWrap");
     const providersWrap = document.getElementById("providersWrap");
@@ -50,8 +60,7 @@
     const btn = document.getElementById("actionBtn");
     const statusEl = document.getElementById("status");
 
-    let mode = "idle"; // idle | subscribe | manage
-    let currentProviders = new Set();
+    let mode = "idle";
 
     async function detect() {
       const email = emailEl.value.trim().toLowerCase();
@@ -71,22 +80,18 @@
           return;
         }
         if (data.exists && data.confirmed) {
-          // Existing confirmed subscriber → manage mode
           mode = "manage";
-          currentProviders = new Set(data.providers);
           nameWrap.style.display = "none";
           providersWrap.style.display = "block";
-          await renderProviders(providersEl, currentProviders);
+          await renderProviders(providersEl, new Set(data.providers));
           btn.disabled = false;
           btn.textContent = "Save subscriptions";
           showStatus(statusEl, "info", "You're already subscribed. Adjust the providers below and save.");
         } else {
-          // New (or unconfirmed) → subscribe mode
           mode = "subscribe";
-          currentProviders = new Set();
           nameWrap.style.display = "block";
           providersWrap.style.display = "block";
-          await renderProviders(providersEl, currentProviders);
+          await renderProviders(providersEl, new Set());
           btn.disabled = false;
           btn.textContent = "Subscribe";
           if (data.exists && !data.confirmed) {
@@ -104,11 +109,10 @@
     let debounce;
     function scheduleDetect() {
       clearTimeout(debounce);
-      debounce = setTimeout(detect, 350);
+      debounce = setTimeout(detect, 250);
     }
     emailEl.addEventListener("input", scheduleDetect);
     emailEl.addEventListener("change", scheduleDetect);
-    // Autofill sometimes skips "input"; catch it on blur too.
     emailEl.addEventListener("blur", detect);
 
     btn.addEventListener("click", async () => {
@@ -119,6 +123,7 @@
         return;
       }
       btn.disabled = true;
+      const prev = btn.textContent;
       btn.textContent = "Working…";
       try {
         if (mode === "subscribe") {
@@ -126,7 +131,7 @@
           const { data } = await postJson("/subscribe", { email, name: name || undefined, providers });
           if (data && data.ok && data.alreadySubscribed) {
             showStatus(statusEl, "info", "You're already subscribed. Switching to manage mode.");
-            detect();
+            await detect();
           } else if (data && data.ok && data.confirmationSent) {
             showStatus(statusEl, "ok", "Confirmation email sent. Check your inbox (and spam) to confirm.");
             btn.textContent = "Subscribe";
@@ -146,6 +151,7 @@
         }
       } catch (e) {
         showStatus(statusEl, "err", "Network error. Try again.");
+        btn.textContent = prev;
       } finally {
         btn.disabled = false;
       }

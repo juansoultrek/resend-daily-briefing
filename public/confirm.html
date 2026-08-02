@@ -6,7 +6,13 @@
   <title>Confirmed | Daily Briefing</title>
   <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
   <meta name="theme-color" content="#0f172a">
-  <link rel="stylesheet" href="assets/styles.css">
+  <script>
+    window.__RDB_BASE = (function () {
+      var m = location.pathname.match(/^(\/[^\/]+)/);
+      return m ? m[1] : "";
+    })();
+    document.write('<link rel="stylesheet" href="' + window.__RDB_BASE + '/assets/styles.css">');
+  </script>
 </head>
 <body>
   <main>
@@ -19,10 +25,11 @@
       <p id="msg">Your first briefing will land in your inbox tomorrow morning. You can change providers anytime from the manage link in any email.</p>
     </div>
 
-    <a class="back" href="./">Back to subscribe</a>
+    <a class="back" id="backLink" href="#">Back to subscribe</a>
   </main>
 
   <script>
+    document.getElementById("backLink").href = window.__RDB_BASE || "/";
     const status = new URLSearchParams(location.search).get("status") || "ok";
     const badge = document.getElementById("badge");
     const title = document.getElementById("title");

@@ -6,7 +6,13 @@
   <title>Manage subscriptions | Daily Briefing</title>
   <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
   <meta name="theme-color" content="#0f172a">
-  <link rel="stylesheet" href="assets/styles.css">
+  <script>
+    window.__RDB_BASE = (function () {
+      var m = location.pathname.match(/^(\/[^\/]+)/);
+      return m ? m[1] : "";
+    })();
+    document.write('<link rel="stylesheet" href="' + window.__RDB_BASE + '/assets/styles.css">');
+  </script>
 </head>
 <body>
   <main>
@@ -20,12 +26,15 @@
       <div id="status" class="status"></div>
     </div>
 
-    <a class="back" href="./">Back to subscribe</a>
+    <a class="back" id="backLink" href="#">Back to subscribe</a>
   </main>
 
-  <script src="assets/app.js"></script>
   <script>
-    const { BASE, getJson, postJson, renderProviders, showStatus, getCheckedSlugs } = window.RDB;
+    document.write('<script src="' + window.__RDB_BASE + '/assets/app.js"><\/script>');
+  </script>
+  <script>
+    document.getElementById("backLink").href = window.__RDB_BASE || "/";
+    const { getJson, postJson, renderProviders, showStatus, getCheckedSlugs } = window.RDB;
     const token = new URLSearchParams(location.search).get("token");
     const introEl = document.getElementById("intro");
     const cardEl = document.getElementById("card");
