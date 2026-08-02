@@ -6,13 +6,7 @@
   <title>Unsubscribed | Daily Briefing</title>
   <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
   <meta name="theme-color" content="#0f172a">
-  <script>
-    window.__RDB_BASE = (function () {
-      var m = location.pathname.match(/^(\/[^\/]+)/);
-      return m ? m[1] : "";
-    })();
-    document.write('<link rel="stylesheet" href="' + window.__RDB_BASE + '/assets/styles.css">');
-  </script>
+  <link rel="stylesheet" href="/resend/assets/styles.css">
 </head>
 <body>
   <main>
@@ -25,24 +19,22 @@
       <p id="msg">You won't receive Daily Briefing emails anymore. You can re-subscribe anytime from the landing page.</p>
     </div>
 
-    <a class="back" id="backLink" href="#">Back to subscribe</a>
+    <a class="back" href="/resend">Back to subscribe</a>
   </main>
 
   <script>
-    document.getElementById("backLink").href = window.__RDB_BASE || "/";
-    const status = new URLSearchParams(location.search).get("status") || "ok";
-    const badge = document.getElementById("badge");
-    const title = document.getElementById("title");
-    const msg = document.getElementById("msg");
-    const heading = document.getElementById("heading");
-
-    if (status !== "ok") {
-      heading.textContent = "Already unsubscribed";
-      badge.className = "badge warn";
-      badge.textContent = "!";
-      title.textContent = "Nothing to do";
-      msg.textContent = "This link was already used, or the subscription was not found. You're not on the list.";
-    }
+    (function () {
+      var status = new URLSearchParams(location.search).get("status") || "ok";
+      if (status !== "ok") {
+        document.getElementById("heading").textContent = "Already unsubscribed";
+        var badge = document.getElementById("badge");
+        badge.className = "badge warn";
+        badge.textContent = "!";
+        document.getElementById("title").textContent = "Nothing to do";
+        document.getElementById("msg").textContent =
+          "This link was already used, or the subscription was not found. You're not on the list.";
+      }
+    })();
   </script>
 </body>
 </html>

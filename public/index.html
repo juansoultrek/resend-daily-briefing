@@ -7,14 +7,12 @@
   <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
   <meta name="theme-color" content="#0f172a">
   <script>
-    // Resolve mount path before any relative asset loads.
-    // /resend and /resend/ both become "/resend" — no trailing slash.
     window.__RDB_BASE = (function () {
       var m = location.pathname.match(/^(\/[^\/]+)/);
       return m ? m[1] : "";
     })();
-    document.write('<link rel="stylesheet" href="' + window.__RDB_BASE + '/assets/styles.css">');
   </script>
+  <link rel="stylesheet" href="/resend/assets/styles.css">
 </head>
 <body>
   <main>
@@ -48,114 +46,123 @@
     <a class="back" href="/">Back to home</a>
   </main>
 
+  <script src="/resend/assets/app.js"></script>
   <script>
-    document.write('<script src="' + window.__RDB_BASE + '/assets/app.js"><\/script>');
-  </script>
-  <script>
-    const { getJson, postJson, renderProviders, showStatus, getCheckedSlugs } = window.RDB;
-    const emailEl = document.getElementById("email");
-    const nameWrap = document.getElementById("nameWrap");
-    const providersWrap = document.getElementById("providersWrap");
-    const providersEl = document.getElementById("providers");
-    const btn = document.getElementById("actionBtn");
-    const statusEl = document.getElementById("status");
-
-    let mode = "idle";
-
-    async function detect() {
-      const email = emailEl.value.trim().toLowerCase();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        providersWrap.style.display = "none";
-        nameWrap.style.display = "none";
-        btn.disabled = true;
-        btn.textContent = "Continue";
-        statusEl.className = "status";
+    (function () {
+      var RDB = window.RDB;
+      if (!RDB) {
+        document.getElementById("status").className = "status show err";
+        document.getElementById("status").textContent = "App script failed to load. Hard-refresh and try again.";
         return;
       }
-      try {
-        const { ok, data } = await getJson(`/lookup?email=${encodeURIComponent(email)}`);
-        if (!ok || !data || !data.ok) {
-          showStatus(statusEl, "err", (data && data.error) || "Could not look up that email. Try again.");
+
+      var emailEl = document.getElementById("email");
+      var nameWrap = document.getElementById("nameWrap");
+      var providersWrap = document.getElementById("providersWrap");
+      var providersEl = document.getElementById("providers");
+      var btn = document.getElementById("actionBtn");
+      var statusEl = document.getElementById("status");
+      var mode = "idle";
+      var debounce;
+
+      async function detect() {
+        var email = emailEl.value.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          providersWrap.style.display = "none";
+          nameWrap.style.display = "none";
           btn.disabled = true;
+          btn.textContent = "Continue";
+          statusEl.className = "status";
           return;
         }
-        if (data.exists && data.confirmed) {
-          mode = "manage";
-          nameWrap.style.display = "none";
-          providersWrap.style.display = "block";
-          await renderProviders(providersEl, new Set(data.providers));
-          btn.disabled = false;
-          btn.textContent = "Save subscriptions";
-          showStatus(statusEl, "info", "You're already subscribed. Adjust the providers below and save.");
-        } else {
-          mode = "subscribe";
-          nameWrap.style.display = "block";
-          providersWrap.style.display = "block";
-          await renderProviders(providersEl, new Set());
-          btn.disabled = false;
-          btn.textContent = "Subscribe";
-          if (data.exists && !data.confirmed) {
-            showStatus(statusEl, "info", "We sent you a confirmation email — check your inbox (and spam) to confirm.");
-          } else {
-            statusEl.className = "status";
+        try {
+          var result = await RDB.getJson("/lookup?email=" + encodeURIComponent(email));
+          var data = result.data;
+          if (!result.ok || !data || !data.ok) {
+            RDB.showStatus(statusEl, "err", (data && data.error) || "Could not look up that email. Try again.");
+            btn.disabled = true;
+            return;
           }
+          if (data.exists && data.confirmed) {
+            mode = "manage";
+            nameWrap.style.display = "none";
+            providersWrap.style.display = "block";
+            await RDB.renderProviders(providersEl, new Set(data.providers));
+            btn.disabled = false;
+            btn.textContent = "Save subscriptions";
+            RDB.showStatus(statusEl, "info", "You're already subscribed. Adjust the providers below and save.");
+          } else {
+            mode = "subscribe";
+            nameWrap.style.display = "block";
+            providersWrap.style.display = "block";
+            await RDB.renderProviders(providersEl, new Set());
+            btn.disabled = false;
+            btn.textContent = "Subscribe";
+            if (data.exists && !data.confirmed) {
+              RDB.showStatus(statusEl, "info", "We sent you a confirmation email — check your inbox (and spam) to confirm.");
+            } else {
+              statusEl.className = "status";
+            }
+          }
+        } catch (e) {
+          RDB.showStatus(statusEl, "err", "Network error while looking up your email.");
+          btn.disabled = true;
         }
-      } catch (e) {
-        showStatus(statusEl, "err", "Network error while looking up your email.");
+      }
+
+      function scheduleDetect() {
+        clearTimeout(debounce);
+        debounce = setTimeout(detect, 250);
+      }
+
+      emailEl.addEventListener("input", scheduleDetect);
+      emailEl.addEventListener("change", scheduleDetect);
+      emailEl.addEventListener("blur", detect);
+
+      btn.addEventListener("click", async function () {
+        var email = emailEl.value.trim().toLowerCase();
+        var providers = RDB.getCheckedSlugs(providersEl);
+        if (providers.length === 0) {
+          RDB.showStatus(statusEl, "err", "Select at least one provider.");
+          return;
+        }
         btn.disabled = true;
-      }
-    }
-
-    let debounce;
-    function scheduleDetect() {
-      clearTimeout(debounce);
-      debounce = setTimeout(detect, 250);
-    }
-    emailEl.addEventListener("input", scheduleDetect);
-    emailEl.addEventListener("change", scheduleDetect);
-    emailEl.addEventListener("blur", detect);
-
-    btn.addEventListener("click", async () => {
-      const email = emailEl.value.trim().toLowerCase();
-      const providers = getCheckedSlugs(providersEl);
-      if (providers.length === 0) {
-        showStatus(statusEl, "err", "Select at least one provider.");
-        return;
-      }
-      btn.disabled = true;
-      const prev = btn.textContent;
-      btn.textContent = "Working…";
-      try {
-        if (mode === "subscribe") {
-          const name = document.getElementById("name").value.trim();
-          const { data } = await postJson("/subscribe", { email, name: name || undefined, providers });
-          if (data && data.ok && data.alreadySubscribed) {
-            showStatus(statusEl, "info", "You're already subscribed. Switching to manage mode.");
-            await detect();
-          } else if (data && data.ok && data.confirmationSent) {
-            showStatus(statusEl, "ok", "Confirmation email sent. Check your inbox (and spam) to confirm.");
-            btn.textContent = "Subscribe";
+        var prev = btn.textContent;
+        btn.textContent = "Working…";
+        try {
+          if (mode === "subscribe") {
+            var name = document.getElementById("name").value.trim();
+            var sub = await RDB.postJson("/subscribe", { email: email, name: name || undefined, providers: providers });
+            var d = sub.data;
+            if (d && d.ok && d.alreadySubscribed) {
+              RDB.showStatus(statusEl, "info", "You're already subscribed. Switching to manage mode.");
+              await detect();
+            } else if (d && d.ok && d.confirmationSent) {
+              RDB.showStatus(statusEl, "ok", "Confirmation email sent. Check your inbox (and spam) to confirm.");
+              btn.textContent = "Subscribe";
+            } else {
+              RDB.showStatus(statusEl, "err", (d && d.error) || "Something went wrong.");
+              btn.textContent = "Subscribe";
+            }
           } else {
-            showStatus(statusEl, "err", (data && data.error) || "Something went wrong.");
-            btn.textContent = "Subscribe";
+            var upd = await RDB.postJson("/manage", { email: email, providers: providers });
+            var u = upd.data;
+            if (u && u.ok) {
+              RDB.showStatus(statusEl, "ok", "Saved. Your next briefing will include the selected providers.");
+              btn.textContent = "Save subscriptions";
+            } else {
+              RDB.showStatus(statusEl, "err", (u && u.error) || "Could not save.");
+              btn.textContent = "Save subscriptions";
+            }
           }
-        } else {
-          const { data } = await postJson("/manage", { email, providers });
-          if (data && data.ok) {
-            showStatus(statusEl, "ok", "Saved. Your next briefing will include the selected providers.");
-            btn.textContent = "Save subscriptions";
-          } else {
-            showStatus(statusEl, "err", (data && data.error) || "Could not save.");
-            btn.textContent = "Save subscriptions";
-          }
+        } catch (e) {
+          RDB.showStatus(statusEl, "err", "Network error. Try again.");
+          btn.textContent = prev;
+        } finally {
+          btn.disabled = false;
         }
-      } catch (e) {
-        showStatus(statusEl, "err", "Network error. Try again.");
-        btn.textContent = prev;
-      } finally {
-        btn.disabled = false;
-      }
-    });
+      });
+    })();
   </script>
 </body>
 </html>

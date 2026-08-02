@@ -6,13 +6,7 @@
   <title>Confirmed | Daily Briefing</title>
   <link rel="icon" href="/favicon.ico" sizes="48x48 32x32 16x16">
   <meta name="theme-color" content="#0f172a">
-  <script>
-    window.__RDB_BASE = (function () {
-      var m = location.pathname.match(/^(\/[^\/]+)/);
-      return m ? m[1] : "";
-    })();
-    document.write('<link rel="stylesheet" href="' + window.__RDB_BASE + '/assets/styles.css">');
-  </script>
+  <link rel="stylesheet" href="/resend/assets/styles.css">
 </head>
 <body>
   <main>
@@ -25,24 +19,22 @@
       <p id="msg">Your first briefing will land in your inbox tomorrow morning. You can change providers anytime from the manage link in any email.</p>
     </div>
 
-    <a class="back" id="backLink" href="#">Back to subscribe</a>
+    <a class="back" href="/resend">Back to subscribe</a>
   </main>
 
   <script>
-    document.getElementById("backLink").href = window.__RDB_BASE || "/";
-    const status = new URLSearchParams(location.search).get("status") || "ok";
-    const badge = document.getElementById("badge");
-    const title = document.getElementById("title");
-    const msg = document.getElementById("msg");
-    const heading = document.getElementById("heading");
-
-    if (status !== "ok") {
-      heading.textContent = "Could not confirm";
-      badge.className = "badge warn";
-      badge.textContent = "!";
-      title.textContent = "Link invalid or expired";
-      msg.textContent = "This confirmation link is no longer valid. Subscribe again from the landing page and we'll send a fresh email.";
-    }
+    (function () {
+      var status = new URLSearchParams(location.search).get("status") || "ok";
+      if (status !== "ok") {
+        document.getElementById("heading").textContent = "Could not confirm";
+        var badge = document.getElementById("badge");
+        badge.className = "badge warn";
+        badge.textContent = "!";
+        document.getElementById("title").textContent = "Link invalid or expired";
+        document.getElementById("msg").textContent =
+          "This confirmation link is no longer valid. Subscribe again from the landing page and we'll send a fresh email.";
+      }
+    })();
   </script>
 </body>
 </html>

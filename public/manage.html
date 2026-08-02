@@ -11,8 +11,8 @@
       var m = location.pathname.match(/^(\/[^\/]+)/);
       return m ? m[1] : "";
     })();
-    document.write('<link rel="stylesheet" href="' + window.__RDB_BASE + '/assets/styles.css">');
   </script>
+  <link rel="stylesheet" href="/resend/assets/styles.css">
 </head>
 <body>
   <main>
@@ -26,54 +26,60 @@
       <div id="status" class="status"></div>
     </div>
 
-    <a class="back" id="backLink" href="#">Back to subscribe</a>
+    <a class="back" href="/resend">Back to subscribe</a>
   </main>
 
+  <script src="/resend/assets/app.js"></script>
   <script>
-    document.write('<script src="' + window.__RDB_BASE + '/assets/app.js"><\/script>');
-  </script>
-  <script>
-    document.getElementById("backLink").href = window.__RDB_BASE || "/";
-    const { getJson, postJson, renderProviders, showStatus, getCheckedSlugs } = window.RDB;
-    const token = new URLSearchParams(location.search).get("token");
-    const introEl = document.getElementById("intro");
-    const cardEl = document.getElementById("card");
-    const providersEl = document.getElementById("providers");
-    const saveBtn = document.getElementById("saveBtn");
-    const statusEl = document.getElementById("status");
+    (function () {
+      var RDB = window.RDB;
+      var token = new URLSearchParams(location.search).get("token");
+      var introEl = document.getElementById("intro");
+      var cardEl = document.getElementById("card");
+      var providersEl = document.getElementById("providers");
+      var saveBtn = document.getElementById("saveBtn");
+      var statusEl = document.getElementById("status");
 
-    (async () => {
-      if (!token) {
-        introEl.textContent = "Missing token. Use the link from your email.";
+      if (!RDB) {
+        introEl.textContent = "App script failed to load.";
         return;
       }
-      const { data } = await getJson(`/subscriber?token=${encodeURIComponent(token)}`);
-      if (!data || !data.ok) {
-        introEl.textContent = (data && data.error) || "Subscriber not found or already unsubscribed.";
-        return;
-      }
-      introEl.textContent = `Signed in as ${data.email}. Toggle the providers you want to receive.`;
-      cardEl.style.display = "block";
-      await renderProviders(providersEl, new Set(data.providers));
+
+      (async function () {
+        if (!token) {
+          introEl.textContent = "Missing token. Use the link from your email.";
+          return;
+        }
+        var result = await RDB.getJson("/subscriber?token=" + encodeURIComponent(token));
+        var data = result.data;
+        if (!data || !data.ok) {
+          introEl.textContent = (data && data.error) || "Subscriber not found or already unsubscribed.";
+          return;
+        }
+        introEl.textContent = "Signed in as " + data.email + ". Toggle the providers you want to receive.";
+        cardEl.style.display = "block";
+        await RDB.renderProviders(providersEl, new Set(data.providers));
+      })();
+
+      saveBtn.addEventListener("click", async function () {
+        var providers = RDB.getCheckedSlugs(providersEl);
+        if (providers.length === 0) {
+          RDB.showStatus(statusEl, "err", "Select at least one provider, or unsubscribe instead.");
+          return;
+        }
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving…";
+        var result = await RDB.postJson("/manage", { token: token, providers: providers });
+        var data = result.data;
+        if (data && data.ok) {
+          RDB.showStatus(statusEl, "ok", "Saved. Your next briefing will include the selected providers.");
+        } else {
+          RDB.showStatus(statusEl, "err", (data && data.error) || "Could not save.");
+        }
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save changes";
+      });
     })();
-
-    saveBtn.addEventListener("click", async () => {
-      const providers = getCheckedSlugs(providersEl);
-      if (providers.length === 0) {
-        showStatus(statusEl, "err", "Select at least one provider, or unsubscribe instead.");
-        return;
-      }
-      saveBtn.disabled = true;
-      saveBtn.textContent = "Saving…";
-      const { data } = await postJson("/manage", { token, providers });
-      if (data && data.ok) {
-        showStatus(statusEl, "ok", "Saved. Your next briefing will include the selected providers.");
-      } else {
-        showStatus(statusEl, "err", (data && data.error) || "Could not save.");
-      }
-      saveBtn.disabled = false;
-      saveBtn.textContent = "Save changes";
-    });
   </script>
 </body>
 </html>
