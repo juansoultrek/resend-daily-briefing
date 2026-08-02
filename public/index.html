@@ -59,42 +59,57 @@
         providersWrap.style.display = "none";
         nameWrap.style.display = "none";
         btn.disabled = true;
+        btn.textContent = "Continue";
+        statusEl.className = "status";
         return;
       }
-      const { data } = await getJson(`/lookup?email=${encodeURIComponent(email)}`);
-      if (!data || !data.ok) return;
-      if (data.exists && data.confirmed) {
-        // Existing confirmed subscriber → manage mode
-        mode = "manage";
-        currentProviders = new Set(data.providers);
-        nameWrap.style.display = "none";
-        providersWrap.style.display = "block";
-        await renderProviders(providersEl, currentProviders);
-        btn.disabled = false;
-        btn.textContent = "Save subscriptions";
-        showStatus(statusEl, "info", "You're already subscribed. Adjust the providers below and save.");
-      } else {
-        // New (or unconfirmed) → subscribe mode
-        mode = "subscribe";
-        currentProviders = new Set();
-        nameWrap.style.display = "block";
-        providersWrap.style.display = "block";
-        await renderProviders(providersEl, currentProviders);
-        btn.disabled = false;
-        btn.textContent = "Subscribe";
-        if (data.exists && !data.confirmed) {
-          showStatus(statusEl, "info", "We sent you a confirmation email — check your inbox (and spam) to confirm.");
-        } else {
-          statusEl.className = "status";
+      try {
+        const { ok, data } = await getJson(`/lookup?email=${encodeURIComponent(email)}`);
+        if (!ok || !data || !data.ok) {
+          showStatus(statusEl, "err", (data && data.error) || "Could not look up that email. Try again.");
+          btn.disabled = true;
+          return;
         }
+        if (data.exists && data.confirmed) {
+          // Existing confirmed subscriber → manage mode
+          mode = "manage";
+          currentProviders = new Set(data.providers);
+          nameWrap.style.display = "none";
+          providersWrap.style.display = "block";
+          await renderProviders(providersEl, currentProviders);
+          btn.disabled = false;
+          btn.textContent = "Save subscriptions";
+          showStatus(statusEl, "info", "You're already subscribed. Adjust the providers below and save.");
+        } else {
+          // New (or unconfirmed) → subscribe mode
+          mode = "subscribe";
+          currentProviders = new Set();
+          nameWrap.style.display = "block";
+          providersWrap.style.display = "block";
+          await renderProviders(providersEl, currentProviders);
+          btn.disabled = false;
+          btn.textContent = "Subscribe";
+          if (data.exists && !data.confirmed) {
+            showStatus(statusEl, "info", "We sent you a confirmation email — check your inbox (and spam) to confirm.");
+          } else {
+            statusEl.className = "status";
+          }
+        }
+      } catch (e) {
+        showStatus(statusEl, "err", "Network error while looking up your email.");
+        btn.disabled = true;
       }
     }
 
     let debounce;
-    emailEl.addEventListener("input", () => {
+    function scheduleDetect() {
       clearTimeout(debounce);
       debounce = setTimeout(detect, 350);
-    });
+    }
+    emailEl.addEventListener("input", scheduleDetect);
+    emailEl.addEventListener("change", scheduleDetect);
+    // Autofill sometimes skips "input"; catch it on blur too.
+    emailEl.addEventListener("blur", detect);
 
     btn.addEventListener("click", async () => {
       const email = emailEl.value.trim().toLowerCase();

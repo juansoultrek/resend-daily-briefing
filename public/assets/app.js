@@ -1,12 +1,13 @@
 // Shared helpers for the public pages of Resend Daily Briefing.
 
-// basePath is the path the app is mounted under (e.g. "/resend").
-// We read it from the <base> tag or fall back to the location pathname prefix.
+// App is mounted under /resend on juansoultrek.com (and optionally elsewhere via APP_BASE_PATH).
 function getBasePath() {
   const base = document.querySelector("base")?.getAttribute("href");
   if (base) return base.replace(/\/$/, "");
-  // fall back: derive from current path if it contains /resend/
-  const m = window.location.pathname.match(/^(\/[^/]+)\//);
+
+  // "/resend", "/resend/", "/resend/manage" → "/resend"
+  const path = window.location.pathname || "/";
+  const m = path.match(/^(\/[^/]+)/);
   return m ? m[1] : "";
 }
 
@@ -15,7 +16,11 @@ const BASE = getBasePath();
 async function getJson(path, init) {
   const res = await fetch(`${BASE}${path}`, init);
   let data = null;
-  try { data = await res.json(); } catch {}
+  try {
+    data = await res.json();
+  } catch {
+    /* ignore non-JSON */
+  }
   return { ok: res.ok, status: res.status, data };
 }
 
@@ -30,8 +35,11 @@ async function postJson(path, body) {
 // Render the provider list as checkboxes into a container.
 // `checked` is the set of slugs that should be pre-checked.
 async function renderProviders(container, checked) {
-  const { data } = await getJson("/providers");
-  const providers = (data && data.providers) || [];
+  const { ok, data } = await getJson("/providers");
+  if (!ok || !data || !data.providers) {
+    throw new Error("Could not load providers");
+  }
+  const providers = data.providers;
   container.innerHTML = "";
   for (const p of providers) {
     const label = document.createElement("label");
