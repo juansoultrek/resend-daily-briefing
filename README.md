@@ -138,7 +138,7 @@ subscribers are never spammed with empty digests when *nothing* notable happened
 - **OpenAI** (`gpt-4o-mini` by default) — analysis
 - **Supabase Postgres** — subscribers + dispatch log
 - **GitHub REST API** — commits, pulls, issues
-- **GitHub Actions** — build + SSH deploy to Node/Passenger hosting
+- **GitHub Actions** — SSH deploy + scheduled daily briefing cron
 
 ---
 
