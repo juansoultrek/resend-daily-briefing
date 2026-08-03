@@ -180,7 +180,20 @@ curl -X POST https://juansoultrek.com/resend/cron/briefing \
   -d '{}'
 ```
 
-Schedule the same `curl` in your host’s cron (or GitHub Actions) once per day.
+### Daily cron (GitHub Actions)
+
+The workflow [`.github/workflows/daily-briefing.yml`](.github/workflows/daily-briefing.yml)
+runs on a schedule (`0 13 * * *` UTC ≈ 7:00 AM Mexico City) and also supports
+**Actions → Daily briefing → Run workflow**.
+
+Required GitHub secret (same `production` environment as deploy, or repo secrets):
+
+| Secret | Value |
+|---|---|
+| `CRON_SECRET` | Same string as the app’s `CRON_SECRET` |
+| `BRIEFING_CRON_URL` | Optional override; defaults to `https://juansoultrek.com/resend/cron/briefing` |
+
+After each run, open **Actions → Daily briefing** for the HTTP response (`sent` / `skipped` / `failed`).
 
 ---
 

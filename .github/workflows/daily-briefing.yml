@@ -1,0 +1,46 @@
+# Triggers the production daily briefing via POST /cron/briefing.
+# Secrets (repo or environment "production"):
+#   CRON_SECRET          — same value as the app's CRON_SECRET env var
+#   BRIEFING_CRON_URL    — optional; defaults to https://juansoultrek.com/resend/cron/briefing
+
+name: Daily briefing
+
+on:
+  schedule:
+    # 13:00 UTC ≈ 07:00 America/Mexico_City (CST, UTC-6)
+    - cron: "0 13 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-briefing
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Trigger POST /cron/briefing
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BRIEFING_CRON_URL: ${{ secrets.BRIEFING_CRON_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::Missing secret CRON_SECRET (must match the app CRON_SECRET)."
+            exit 1
+          fi
+          URL="${BRIEFING_CRON_URL:-https://juansoultrek.com/resend/cron/briefing}"
+          echo "POST ${URL}"
+          HTTP_CODE=$(curl -sS -o /tmp/briefing-response.json -w "%{http_code}" \
+            -X POST "$URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Cron-Secret: ${CRON_SECRET}" \
+            -d '{}')
+          echo "HTTP ${HTTP_CODE}"
+          cat /tmp/briefing-response.json
+          echo
+          test "$HTTP_CODE" = "200"
