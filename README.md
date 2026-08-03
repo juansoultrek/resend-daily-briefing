@@ -1,62 +1,220 @@
 # Resend Daily Briefing
 
-A daily email digest of GitHub repo activity, analyzed by AI and sent via **Resend**.
+**An AI-analyzed morning email of the GitHub changes that actually matter.**
 
-Each morning, subscribers receive a single email summarizing the most relevant
-changes from the last 24 hours across a configurable list of repositories.
-The AI does not just list commits — it answers:
+Each day, subscribers get one briefing covering the providers they follow
+(Resend, Supabase, Nango). The model does not dump commit lists — it answers:
 
 - What actually changed?
-- Why does this change matter?
+- Why does it matter?
 - Who is affected?
-- Is it a feature, a bugfix, a perf improvement, a refactor, or a possible breaking change?
-- Is it worth opening GitHub to review in detail?
+- Feature, bugfix, perf, refactor, or possible breaking change?
+- Worth opening GitHub today?
 
-The goal: read the email in under two minutes and decide which repos deserve
-your attention that day.
+**Read it in under two minutes. Decide where to spend attention.**
 
-## Status
+| | |
+|---|---|
+| **Live demo** | [juansoultrek.com/resend](https://juansoultrek.com/resend) |
+| **Portfolio** | [juansoultrek.com](https://juansoultrek.com) |
+| **Repo** | [github.com/juansoultrek/resend-daily-briefing](https://github.com/juansoultrek/resend-daily-briefing) |
 
-🚧 Scaffold — endpoints and integrations are added incrementally.
-See `ARCHITECTURE.md` (added in a later commit) for the full design.
+---
 
-## Stack
+## Why I built this
 
-- **Node.js 20+** + **TypeScript 5.9**
-- **Express 5** — HTTP server
-- **tsx** — dev runner with watch mode
+I wanted a portfolio piece that shows **modern API integration + AI + email UX**,
+not another contact form.
+
+Resend is the product being showcased: the briefing email *is* the product.
+GitHub supplies the signal, OpenAI turns noise into judgment, Supabase stores
+subscriptions, and a cron job runs the pipeline every morning.
+
+The three default providers (Resend, Supabase, Nango) are intentional — they are
+the tools this portfolio already explores, and they give a coherent “devtools
+watchlist” story.
+
+---
+
+## Why Resend
+
+This project is built to demonstrate Resend, not “any SMTP API”.
+
+| Capability | How this project uses it |
+|---|---|
+| **Verified domain sending** | `RESEND_FROM` on a DNS-verified domain (SPF / DKIM / DMARC) |
+| **Transactional product email** | Daily briefing HTML designed for readability in mail clients |
+| **Double opt-in** | Confirmation email before any briefing is sent |
+| **List-Unsubscribe headers** | One-click unsubscribe + manage links in every briefing |
+| **Resend Node SDK** | Thin `Mailer` wrapper around `resend.emails.send()` |
+
+If you only look at one line of code (`emails.send`), you miss the point:
+the **email design, confirmation flow, and deliverability setup** are the showcase.
+
+---
+
+## How it works
+
+```
+GitHub API ──► normalize events (24h window)
+                      │
+                      ▼
+              OpenAI (JSON + Zod schema)
+                      │
+                      ▼
+         Per-provider analysis (cached)
+                      │
+                      ▼
+     Aggregate by subscriber preferences
+                      │
+                      ▼
+         Resend ──► subscriber inbox
+                      │
+                      ▼
+              Supabase dispatch log
+```
+
+1. **Subscribe** — email + optional name + provider checkboxes.
+2. **Confirm** — double opt-in link (no briefings until confirmed).
+3. **Cron** — `POST /cron/briefing` with `X-Cron-Secret`.
+4. **Collect** — commits / PRs / issues for each provider’s repos.
+5. **Analyze** — one AI pass per provider (shared across subscribers).
+6. **Send** — one email per subscriber; **skip** if nothing notable that day.
+7. **Idempotent** — `dispatches` prevents double-sends for the same date.
+
+---
+
+## Architecture
+
+```
+src/
+  server.ts           Express routes (health, subscribe, cron, pages)
+  config.ts           Env loading + validation
+  providers.ts        Provider → repo mapping (add a provider in one place)
+  github/             REST client + event normalizer
+  ai/                 Prompts, Zod schema, OpenAI analyzer
+  email/              Resend client + briefing + confirmation HTML
+  cron/               Daily briefing orchestration + analysis cache
+  db/                 Supabase repos (subscribers, dispatches)
+  auth/               Opaque confirm / manage / unsubscribe tokens
+public/               Subscribe / manage / confirm / unsubscribe UI
+```
+
+**Separation of concerns (intentionally simple):**
+
+| Layer | Responsibility |
+|---|---|
+| `github/` | Fetch + normalize — no AI, no email |
+| `ai/` | Structured analysis — no GitHub, no Resend |
+| `email/` | Render + send — no DB, no GitHub |
+| `cron/` | Orchestrate the pipeline |
+| `providers.ts` | Single place to add Stripe / Vercel / etc. |
+
+AI output is validated with Zod (`change_type`, `what_changed`, `why_it_matters`,
+`who_is_affected`, `should_open_github`, `confidence`, `url`).
+
+---
+
+## What’s in the email
+
+Each briefing includes, per provider:
+
+- Accent bar + short day summary
+- Highlights with change-type badges (`BREAKING`, `SECURITY`, `NEW`, `FIX`, …)
+- **What changed / Why it matters / Who is affected**
+- Confidence + “worth opening GitHub?” signal
+- Direct links to the PR / commit / issue
+- Manage + Unsubscribe footer
+
+Quiet providers are omitted from a busy day when appropriate —
+subscribers are never spammed with empty digests when *nothing* notable happened.
+
+---
+
+## Tech stack
+
+- **Node.js 22+** · **TypeScript 5.9** · **Express 5**
+- **Resend** — briefing + confirmation emails
+- **OpenAI** (`gpt-4o-mini` by default) — analysis
 - **Supabase Postgres** — subscribers + dispatch log
-- **OpenAI** (`gpt-4o-mini` by default) — analysis of repo changes
-- **Resend** — email delivery (briefing + confirmation)
-- **GitHub Actions** — daily cron trigger + SSH deploy
+- **GitHub REST API** — commits, pulls, issues
+- **GitHub Actions** — build + SSH deploy to Node/Passenger hosting
 
-## Quick start (local dev)
+---
+
+## Quick start
 
 ```bash
 git clone https://github.com/juansoultrek/resend-daily-briefing.git
 cd resend-daily-briefing
-cp .env.example .env      # fill in RESEND_API_KEY, OPENAI_API_KEY, GH_TOKEN, SUPABASE_*
+cp .env.example .env   # fill in keys (see below)
 npm ci
-npm run dev               # http://localhost:8787/health
+npm run dev            # http://localhost:8787/health
 ```
 
-Without keys filled in, the server still boots; `/health` reports which keys
-are present, and service endpoints return a clear error until the matching
-key is set.
+With `APP_BASE_PATH=/resend` (production style):
 
-## Project layout
+- UI → `http://localhost:8787/resend`
+- Health → `http://localhost:8787/resend/health`
 
+### Required env
+
+| Variable | Purpose |
+|---|---|
+| `GH_TOKEN` | GitHub API (higher rate limits) |
+| `OPENAI_API_KEY` | Analysis |
+| `RESEND_API_KEY` / `RESEND_FROM` | Send mail from a verified domain |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Subscribers + dispatches |
+| `CRON_SECRET` | Protects `POST /cron/briefing` |
+
+Optional: `APP_BASE_PATH`, `APP_BASE_URL`, `OPENAI_MODEL`, `PORT`.
+
+See [`.env.example`](.env.example) for comments on each value.
+
+### Trigger a briefing manually
+
+```bash
+curl -X POST https://juansoultrek.com/resend/cron/briefing \
+  -H "Content-Type: application/json" \
+  -H "X-Cron-Secret: $CRON_SECRET" \
+  -d '{}'
 ```
-src/
-  server.ts        Express app + /health
-  config.ts        env reading + validation
-  github/          GitHub API client + normalizer      (added later)
-  ai/              OpenAI analyzer + prompts           (added later)
-  email/           React Email template + Resend sender (added later)
-  db/              Supabase client + subscribers CRUD  (added later)
-  routes/          public, cron, unsubscribe endpoints (added later)
-  public/          landing page + form (static HTML)   (added later)
-```
+
+Schedule the same `curl` in your host’s cron (or GitHub Actions) once per day.
+
+---
+
+## Adding a provider
+
+Edit [`src/providers.ts`](src/providers.ts) — one object with `slug`, `displayName`,
+`tagline`, `accent`, and `repos[]`. Existing subscribers keep their slug; they
+automatically pick up new repos for that provider. No DB migration.
+
+---
+
+## Future improvements
+
+- **React Email** templates for the briefing (more Resend-native authoring)
+- **Delivery webhooks** (delivered / bounced / complained) logged next to dispatches
+- Daily metrics footer (repos scanned, events analyzed, processing time)
+- Weekly digest mode
+- Optional Slack / Discord sinks for the same analysis payload
+
+---
+
+## Lessons learned
+
+- **Double opt-in is non-negotiable** for a public subscribe form — confirmation
+  email is part of the Resend story, not overhead.
+- **Cache analysis per provider**, not per subscriber — 50 people on Resend
+  should not mean 50 OpenAI calls.
+- **Skip quiet days** — empty digests train people to ignore you.
+- **Absolute asset paths under a subpath** (`/resend`) matter on shared hosting;
+  relative `assets/` breaks when the URL has no trailing slash.
+- **LiteSpeed may 403 bare POSTs** — always send `Content-Type: application/json`
+  from cron `curl`.
+
+---
 
 ## Commit style
 
